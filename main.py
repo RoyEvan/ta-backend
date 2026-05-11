@@ -3,7 +3,6 @@ import json
 
 from fastapi import FastAPI, status
 from fastapi.middleware.cors import CORSMiddleware
-import os
 from google import genai
 from google.genai import types
 import httpx
@@ -14,8 +13,6 @@ from pydantic_settings import BaseSettings
 import firebase_admin
 from firebase_admin import credentials, firestore
 from fastapi import FastAPI
-
-
 
 cred = credentials.Certificate("./serviceAccountKey.json")
 firebase_admin.initialize_app(cred)
@@ -31,7 +28,6 @@ class Settings(BaseSettings):
 
 app = FastAPI()
 settings = Settings()
-
 app.add_middleware(
   CORSMiddleware,
   allow_origins=["*"],
@@ -144,8 +140,7 @@ def saved_corrections(request: SavedRequest) -> dict:
     return Response(status=status.HTTP_200_OK, data=corrections).json()
   except Exception as e:
     return Response(status=status.HTTP_500_INTERNAL_SERVER_ERROR, data=None, message="Failed").json()
-  
-  
+
 
 @app.post("/api/correct")
 async def gec(req: GECRequest) -> dict:
