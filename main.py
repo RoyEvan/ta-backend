@@ -41,16 +41,16 @@ app.add_middleware(
 def signin(request: SignInRequest) -> dict:
   try:
     user = User(email=request.email)
-    docs = db.collection('users').where('email', '==', user.email).get()
-    if len(docs) == 0:
+    userDoc = db.collection('users').where('email', '==', user.email).get()
+    if len(userDoc) == 0:
       return Response(status=status.HTTP_404_NOT_FOUND, data=None, message="You haven't signed up yet.").json()
     
-    user_data = docs[0].to_dict()
-    user.user_id = docs[0].id
+    user_data = userDoc[0].to_dict()
+    user.user_id = userDoc[0].id
     user.username = user_data['username']
     
     return Response(status=status.HTTP_200_OK, data=user.detail()).json()
-  except Exception as e:
+  except:
     return Response(status=status.HTTP_500_INTERNAL_SERVER_ERROR, data=None, message="Failed").json()
 
 
@@ -69,7 +69,7 @@ def signup(request: SignUpRequest) -> dict:
     })
 
     return Response(status=status.HTTP_201_CREATED, data={"user_id": user_doc.id}).json()
-  except Exception as e:
+  except:
     return Response(status=status.HTTP_500_INTERNAL_SERVER_ERROR, data=None, message="Failed").json()
 
 
@@ -94,7 +94,7 @@ def history(request: HistoryRequest) -> dict:
       corrections.append(current)
     
     return Response(status=status.HTTP_200_OK, data=corrections).json()    
-  except Exception as e:
+  except:
     return Response(status=status.HTTP_500_INTERNAL_SERVER_ERROR, data=None, message="Failed").json()
 
 
@@ -113,7 +113,7 @@ def save_corrections(request: SaveRequest) -> dict:
       saved_ids.append(correction_id)
 
     return Response(status=status.HTTP_200_OK, data={"saved_ids": saved_ids}).json()
-  except Exception as e:
+  except:
     return Response(status=status.HTTP_500_INTERNAL_SERVER_ERROR, data=None, message="Failed").json()
 
 
@@ -138,7 +138,7 @@ def saved_corrections(request: SavedRequest) -> dict:
       corrections.append(current)
 
     return Response(status=status.HTTP_200_OK, data=corrections).json()
-  except Exception as e:
+  except:
     return Response(status=status.HTTP_500_INTERNAL_SERVER_ERROR, data=None, message="Failed").json()
 
 
@@ -154,7 +154,7 @@ async def gec(req: GECRequest) -> dict:
       res.raise_for_status()
 
     infer_res = res.json()
-    
+
     # Construct the response
     corrections = []
     model = "gemini-3.1-pro-preview"
@@ -167,8 +167,9 @@ async def gec(req: GECRequest) -> dict:
       ),
     )
     
-    for orig, corr in zip(req.sentences, infer_res["predictions"]):
-      prompt = f"""
+    if(infer_res["ok"]):
+      for orig, corr in zip(req.sentences, infer_res["predictions"]):
+        prompt = f"""
 I have this sentence: "{orig}" and the corrected version: "{corr["sentence"]}".
 The sentence is in {corr["voice_type"]} voice.
 Please generate ONLY the JSON: {{"voice_conversion": "", "corrections": [{{"error_type": "Verb Tense", "explanation": "", "orig_start": 0, "orig_end": 0, "corr_start": 0, "corr_end": 0, "correction": ""}}]}}.
@@ -182,52 +183,35 @@ Please generate ONLY the JSON: {{"voice_conversion": "", "corrections": [{{"erro
 "voice_conversion" is when the result of the corrected sentence when it is converted into {{'active' if corr["voice_type"] == 'passive' else 'passive'}} voice, make sure the result is truly in {'active' if corr["voice_type"] == 'passive' else 'passive'} voice.
 The attribute "corrections" must always be an array of object, whether there are more than one corrections or just one.
 The whole JSON must not contain any wrappers, just pure JSON.
-For example, if the original sentence is "I love eat chicken fry" and the corrected sentence is "I love to eat fried chicken.", then the JSON result should look like this: {{"voice_conversion": "Eating fried chicken is being loved by Me.", "corrections": [{{"error_type": "1-2 Words Error Type", "explanation": "One sentence explanation.", "orig_start": 1, "orig_end": 2, "corr_start": 1, "corr_end": 3, "correction": "to"}}, {{"error_type": "1-2 Words Error Type", "explanation": "One sentence explanation.", "orig_start": 3, "orig_end": 4, "corr_start": 4, "corr_end": 5, "correction": "fried chicken"}}, {{"error_type": "1-2 Words Error Type", "explanation": "One sentence explanation.", "orig_start": 5, "orig_end": 5, "corr_start": 6, "corr_end": 6, "correction": "."}}]}}.
 Please make sure to only see the original sentence and the corrected version, DO NOT try correct it on your own.
-      """
-      contents = [
-        types.Content(
-          role="user",
-          parts=[
-            types.Part.from_text(text=prompt),
-          ],
-        ),
-      ]
+        """
+# For example, if the original sentence is "I love eat chicken fry" and the corrected sentence is "I love to eat fried chicken.", then the JSON result should look like this: {{"voice_conversion": "Eating fried chicken is being loved by Me.", "corrections": [{{"error_type": "1-2 Words Error Type", "explanation": "One sentence explanation.", "orig_start": 1, "orig_end": 2, "corr_start": 1, "corr_end": 3, "correction": "to"}}, {{"error_type": "1-2 Words Error Type", "explanation": "One sentence explanation.", "orig_start": 3, "orig_end": 4, "corr_start": 4, "corr_end": 5, "correction": "fried chicken"}}, {{"error_type": "1-2 Words Error Type", "explanation": "One sentence explanation.", "orig_start": 5, "orig_end": 5, "corr_start": 6, "corr_end": 6, "correction": "."}}]}}.
+        contents = [
+          types.Content(
+            role="user",
+            parts=[
+              types.Part.from_text(text=prompt),
+            ],
+          ),
+        ]
 
-      gemini_res = client.models.generate_content(
-        model=model,
-        contents=contents,
-        config=generate_content_config,
-      )
+        gemini_res = client.models.generate_content(
+          model=model,
+          contents=contents,
+          config=generate_content_config,
+        )
       
+        response = json.loads(gemini_res.text)
       
-      # async with httpx.AsyncClient(timeout=60) as client:
-      #   # Construct the prompt for Gemini-3 to get the details in JSON format
-      #   # prompt = f'I have this sentence: "{orig}" and the corrected version: "{corr["sentence"]}". The sentence is in {corr["voice_type"]} voice. Please generate ONLY the JSON: {{"voice_conversion": "", "corrections": [{{"error_type": "Verb Tense", "explanation": "", "orig_start": 0, "orig_end": 0, "corr_start": 0, "corr_end": 0, "correction": ""}}]}}. "explanation" is one short sentence explaining the error briefly. "orig_start" is the starting position of the word order in the original sentence being corrected. "orig_end" is the ending position of word order in the original sentence being corrected. "corr_start" is the starting position of word order in the corrected sentence that will replace the error in the original sentence. "corr_end" is the ending position of word order in the corrected sentence that will replace the error in the original sentence. "error_type" depends on the type of error, it can be: Verb Tense, Subject–Verb Agreement, Article Usage, Preposition Error, Plurality/Countability, Word Order Error, or it could be another value but make sure it is no longer than 1 word. "correction" is the word that replaces the position of characters that will be replaced by this, this attribute is purely to speed up the history reading process for future needs. "voice_conversion" is when the result of the corrected sentence when it is converted into passive/acive voice, depends on the current voice type. The attribute "corrections" must always be an array of object, whether there are more than one corrections or just one. The whole JSON must not contain any wrappers, just pure JSON.'
-        
-      #   # Call Gemini-3-Flash API
-      #   gemini_res = await client.post(GEMINI_URL, json={
-      #     "contents": [{"parts": [{"text": prompt}]}],
-      #     "generationConfig": {"thinkingConfig": {"thinkingBudget": 0}}
-      #   })
-      #   # print(gemini_res)        
-      #   gemini_res.raise_for_status()
-
-      # Parse the Gemini-3 response to extract the details
-      # gemini_infer_res = gemini_res.text.json()
-      
-      response = json.loads(gemini_res.text)
-      
-      # print(gemini_text['voice_conversion'])
-      # Append the correction details to the response
-      corrections.append({
-        "correction_id": None,
-        "orig_sentence": orig,
-        "corr_sentence": corr['sentence'],
-        "voice_type": corr['voice_type'],
-        "voice_analysis": response["voice_conversion"],
-        "correction_details": response["corrections"],
-      })
+        # Append the correction details to the response
+        corrections.append({
+          "correction_id": None,
+          "orig_sentence": orig,
+          "corr_sentence": corr['sentence'],
+          "voice_type": corr['voice_type'],
+          "voice_analysis": response["voice_conversion"],
+          "correction_details": response["corrections"],
+        })
 
     if req.user_id:
       user_doc = db.collection('users').document(req.user_id)
@@ -255,19 +239,6 @@ Please make sure to only see the original sentence and the corrected version, DO
             "corr_end": detail.get("corr_end"),
           })
     
-    return {
-      "status": {
-        "code": status.HTTP_200_OK,
-        "message": "GEC inference successful"
-      },
-      "data": corrections
-    }
-    
-  except httpx.HTTPError as e:
-    return {
-      "status": {
-        "code": status.HTTP_500_INTERNAL_SERVER_ERROR,
-        "message": f"HTTP error occurred: {str(e)}"
-      },
-      "data": []
-    }
+    return Response(status=status.HTTP_200_OK, data=corrections, message="GEC inference successful").json()
+  except:
+    return Response(status=status.HTTP_500_INTERNAL_SERVER_ERROR, data=None, message="failed").json()
