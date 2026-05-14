@@ -14,8 +14,7 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 from fastapi import FastAPI
 
-cred = credentials.Certificate("./serviceAccountKey.json")
-firebase_admin.initialize_app(cred)
+firebase_admin.initialize_app()
 db = firestore.client(database_id='gec-tagging-db')
 
 class Settings(BaseSettings):
