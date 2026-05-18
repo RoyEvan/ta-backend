@@ -153,6 +153,7 @@ async def gec(req: GECRequest) -> dict:
       res.raise_for_status()
 
     infer_res = res.json()
+    print(infer_res)
 
     # Construct the response
     corrections = []
@@ -167,7 +168,11 @@ async def gec(req: GECRequest) -> dict:
     )
     
     if(infer_res["ok"]):
+      print(infer_res['ok'])
+      i = 0
       for orig, corr in zip(req.sentences, infer_res["predictions"]):
+        print(i)
+        i+=1
         prompt = f"""
 I have this sentence: "{orig}" and the corrected version: "{corr["sentence"]}".
 The sentence is in {corr["voice_type"]} voice.
@@ -201,6 +206,7 @@ Please make sure to only see the original sentence and the corrected version, DO
         )
       
         response = json.loads(gemini_res.text)
+        print(response)
       
         # Append the correction details to the response
         corrections.append({
@@ -212,6 +218,8 @@ Please make sure to only see the original sentence and the corrected version, DO
           "correction_details": response["corrections"],
         })
 
+    
+    
     if req.user_id:
       user_doc = db.collection('users').document(req.user_id)
       for correction in corrections:
@@ -239,5 +247,6 @@ Please make sure to only see the original sentence and the corrected version, DO
           })
     
     return Response(status=status.HTTP_200_OK, data=corrections, message="GEC inference successful").json()
-  except:
+  except Exception as e:
+    print(e)
     return Response(status=status.HTTP_500_INTERNAL_SERVER_ERROR, data=None, message="failed").json()
